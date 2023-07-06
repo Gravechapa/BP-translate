@@ -13,8 +13,7 @@ namespace BPtranslate {
     public sealed class Program {
         static X509Certificate2 serverCertificate = new X509Certificate2(Path.Combine(Directory.GetCurrentDirectory(), "bpmasterdata.pfx"));
         static string masterDataIp;
-        static string hostsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "system32/drivers/etc/hosts");
-
+        static string hostsFile = "/etc/hosts";
         const string redirectEntry = "127.0.0.1 masterdata-main.aws.blue-protocol.com";
 
         static void RunServer() {
@@ -77,10 +76,13 @@ namespace BPtranslate {
         }
 
         public static int Main(string[] args) {
-            handler = new ConsoleEventDelegate(ConsoleEventCallback);
-            SetConsoleCtrlHandler(handler, true);
-
-            using (X509Store store = new X509Store(StoreName.Root, StoreLocation.LocalMachine)) {
+            Console.CancelKeyPress += new ConsoleCancelEventHandler(closeHandler);
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                hostsFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                                        "system32/drivers" + hostsFile);
+            }
+            using (X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser)) {
                 store.Open(OpenFlags.ReadWrite);
                 store.Add(serverCertificate);
             }
@@ -121,7 +123,7 @@ namespace BPtranslate {
         }
 
         static void RemoveCertificate() {
-            using (X509Store store = new X509Store(StoreName.Root, StoreLocation.LocalMachine)) {
+            using (X509Store store = new X509Store(StoreName.My, StoreLocation.CurrentUser)) {
                 store.Open(OpenFlags.ReadWrite);
                 store.Remove(serverCertificate);
             }
@@ -131,17 +133,10 @@ namespace BPtranslate {
             masterDataIp = Dns.GetHostEntry("masterdata-main.aws.blue-protocol.com").AddressList[0].ToString();
         }
 
-        //Handle console close
-        static bool ConsoleEventCallback(int eventType) {
-            if (eventType == 2) {
-                RemoveRedirectFromHosts();
-                RemoveCertificate();
-            }
-            return false;
+        protected static void closeHandler(object sender, ConsoleCancelEventArgs args) {
+            Console.WriteLine("Interrupted");
+            RemoveRedirectFromHosts();
+            RemoveCertificate();
         }
-        static ConsoleEventDelegate handler;
-        private delegate bool ConsoleEventDelegate(int eventType);
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool SetConsoleCtrlHandler(ConsoleEventDelegate callback, bool add);
     }
 }
